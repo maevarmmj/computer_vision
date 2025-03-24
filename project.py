@@ -1,5 +1,5 @@
 import math
-
+import time
 import cv2 as cv
 import numpy as np
 
@@ -8,9 +8,15 @@ def calculate_moment(mask):
 
     return moments
 
-cap = cv.VideoCapture('Video/Mousse_new.mp4')
-frameTime = 50
+cap = cv.VideoCapture('Video/Mouse_new.mp4')
+frameTime = 200
 trajectoire = []
+PIXEL_TO_METERS = 0.00185 # coeff pour la vitesse plus tard
+previous_centroid = None  # Dernière position connue de la balle
+previous_time = None  # Dernier timestamp
+g = 9.81  # gravité
+
+
 
 
 while cap.isOpened():
@@ -28,17 +34,16 @@ while cap.isOpened():
     point_hd = (690, 330)
     point_bg = (20, 525)
     point_bd = (675, 590)
-    pts1 = np.float32([point_hg, point_hd, point_bg, point_bd]) # points réels
+    pts1 = np.float32([point_hg, point_hd, point_bg, point_bd]) # points du tableau sur la video
 
     point_hg_new = (0, 0)
     point_hd_new = (1080, 0)
     point_bg_new = (0, 621)
     point_bd_new = (1080, 621)
-    pts2 = np.float32([point_hg_new, point_hd_new, point_bg_new, point_bd_new]) # points sur la vidéo (pour transformation)
+    pts2 = np.float32([point_hg_new, point_hd_new, point_bg_new, point_bd_new]) # points finaux
 
     M = cv.getPerspectiveTransform(pts1, pts2)
     transform = cv.warpPerspective(frame, M, (1080, 621)) # facteur 1,85
-
 
     cv.imshow('transform', transform)
 
@@ -53,9 +58,7 @@ while cap.isOpened():
     mask = cv.inRange(hsv, lower_red-80, upper_red+80)
 
     contours, hierarchy = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-    #
-    #
-    #
+
     res = cv.bitwise_and(transform, transform, mask=mask)
 
     if contours: # contours found?
@@ -68,7 +71,7 @@ while cap.isOpened():
 
         mask = mask_largest_area
 
-        # # Bounding Box
+        # Bounding Box
         x, y, w, h = cv.boundingRect(largest_contour)
         cv.rectangle(res, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
@@ -80,39 +83,41 @@ while cap.isOpened():
         cY = int(moment_mask["m01"] / moment_mask["m00"])
         centroid = (cX,cY)
         cv.circle(res, centroid, 4, (255, 0, 0), -1)
-        #
-        # mu20 = moment_mask['mu20'] / moment_mask['m00']
-        # mu02 = moment_mask['mu02'] / moment_mask['m00']
-        # mu11 = moment_mask['mu11'] / moment_mask['m00']
-        #
-        # angle = math.degrees(0.5 * math.atan2(2 * mu11, mu20 - mu02))
-        #
-        # common_part = (mu20 + mu02)
-        # diff_part = math.sqrt((4 * mu11 ** 2) + ((mu20 - mu02) ** 2))
-        # a = math.sqrt(common_part + diff_part)
-        # b = math.sqrt(common_part - diff_part)
-        #
-        # l = int(math.sqrt(8 * a)) * 4
-        # w = int(math.sqrt(8 * b)) * 4
-        #
-        # axes = (l,w)
-        # color = (255, 0, 0)
-        #
-        # # Ellipse moyen
-        # cv.circle(res, centroid, radius=5, color=color, thickness=-1)
-        # cv.ellipse(res, centroid, axes, angle, 0, 360, color, 2)
+
+        mu20 = moment_mask['mu20'] / moment_mask['m00']
+        mu02 = moment_mask['mu02'] / moment_mask['m00']
+        mu11 = moment_mask['mu11'] / moment_mask['m00']
+
+        angle = math.degrees(0.5 * math.atan2(2 * mu11, mu20 - mu02))
 
         trajectoire.append(centroid)
         for point in trajectoire:
             cv.circle(res, point, 3, (0, 255, 255), -1)  # Trajectoire avec pts jaunes
 
+        # Calcul de la vitesse
+        current_time = time.time()  # Temps actuel en secondes
+        if previous_centroid is not None and previous_time is not None:
+            x_prev, y_prev = previous_centroid
+            distance_pixels = math.sqrt((cX - x_prev) ** 2 + (cY - y_prev) ** 2)
+            distance_meters = distance_pixels * PIXEL_TO_METERS
 
+            delta_t = current_time - previous_time  # Temps écoulé en secondes
+
+            if delta_t > 0:
+                speed_mps = distance_meters / delta_t  # m/s
+                print(f"Vitesse = {speed_mps:.2f} m/s")
+
+                cv.putText(res, f"{speed_mps:.2f} m/s", (cX + 20, cY - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+                cv.putText(res, f"{angle:.2f} deg", (cX + 20, cY - 30), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+
+
+        previous_centroid = centroid
+        previous_time = current_time
 
     else:
         mask = np.zeros_like(mask)
 
-
-    cv.imshow('frame', frame)
+    # cv.imshow('frame', frame)
     cv.imshow('res', res)
 
     k = cv.waitKey(5) & 0xFF
