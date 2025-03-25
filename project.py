@@ -9,7 +9,7 @@ def calculate_moment(mask):
     return moments
 
 cap = cv.VideoCapture('Video/Mouse_new.mp4')
-frameTime = 200
+frameTime = 1
 trajectoire = []
 PIXEL_TO_METERS = 0.00185 # coeff pour la vitesse plus tard
 previous_centroid = None  # Dernière position connue de la balle
@@ -45,8 +45,6 @@ while cap.isOpened():
     M = cv.getPerspectiveTransform(pts1, pts2)
     transform = cv.warpPerspective(frame, M, (1080, 621)) # facteur 1,85
 
-    cv.imshow('transform', transform)
-
 
     # Convert BGR to HSV
     hsv = cv.cvtColor(transform, cv.COLOR_BGR2HSV)
@@ -73,7 +71,7 @@ while cap.isOpened():
 
         # Bounding Box
         x, y, w, h = cv.boundingRect(largest_contour)
-        cv.rectangle(res, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        cv.rectangle(transform, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
         moment_mask = calculate_moment(mask)
 
@@ -82,7 +80,7 @@ while cap.isOpened():
         cX = int(moment_mask["m10"] / moment_mask["m00"])
         cY = int(moment_mask["m01"] / moment_mask["m00"])
         centroid = (cX,cY)
-        cv.circle(res, centroid, 4, (255, 0, 0), -1)
+        cv.circle(transform, centroid, 4, (255, 0, 0), -1)
 
         mu20 = moment_mask['mu20'] / moment_mask['m00']
         mu02 = moment_mask['mu02'] / moment_mask['m00']
@@ -92,9 +90,23 @@ while cap.isOpened():
 
         trajectoire.append(centroid)
         for point in trajectoire:
-            cv.circle(res, point, 3, (0, 255, 255), -1)  # Trajectoire avec pts jaunes
+            cv.circle(transform, point, 3, (0, 255, 255), -1)  # Trajectoire avec pts jaunes
 
-        # Calcul de la vitesse
+        if len(trajectoire) > 1:
+            (x1, y1) = trajectoire[0]
+            (x2, y2) = trajectoire[1]
+
+            angle_init = math.atan2(y2 - y1, x2 - x1)
+
+            delta_t = frameTime
+            v0_pix = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+            v0_meters = v0_pix * PIXEL_TO_METERS
+            v0 = v0_meters / delta_t
+
+            print(f"Vitesse initiale : {v0:.2f} m/s, Angle initial : {math.degrees(angle_init):.2f}°")
+
+
+        # VITESSE
         current_time = time.time()  # Temps actuel en secondes
         if previous_centroid is not None and previous_time is not None:
             x_prev, y_prev = previous_centroid
@@ -107,8 +119,8 @@ while cap.isOpened():
                 speed_mps = distance_meters / delta_t  # m/s
                 print(f"Vitesse = {speed_mps:.2f} m/s")
 
-                cv.putText(res, f"{speed_mps:.2f} m/s", (cX + 20, cY - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-                cv.putText(res, f"{angle:.2f} deg", (cX + 20, cY - 30), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+                cv.putText(transform, f"{speed_mps:.2f} m/s", (cX + 20, cY - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+                cv.putText(transform, f"{angle:.2f} deg", (cX + 20, cY - 30), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
 
 
         previous_centroid = centroid
@@ -118,7 +130,7 @@ while cap.isOpened():
         mask = np.zeros_like(mask)
 
     # cv.imshow('frame', frame)
-    cv.imshow('res', res)
+    cv.imshow('res', transform)
 
     k = cv.waitKey(5) & 0xFF
     if cv.waitKey(frameTime) & 0xFF == ord('q'):
