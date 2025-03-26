@@ -1,5 +1,3 @@
-<<<<<<< Updated upstream
-=======
 import math
 import time
 import cv2 as cv
@@ -142,4 +140,4 @@ if __name__ == "__main__":
 
     etude_video(balle_rouge, upper_red, lower_red)
     etude_video(balle_jaune, upper_yellow, lower_yellow)
->>>>>>> Stashed changes
+
