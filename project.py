@@ -1,6 +1,8 @@
 import math
 import cv2 as cv
 import numpy as np
+from KalmanFilter import KalmanFilter
+
 
 # --------- Calcul du moment pour la vitesse instantanée -------
 def calculate_moment(mask):
@@ -29,7 +31,10 @@ def etude_video(video_path, upper_range, lower_range):
     g = 9.81  # Coefficient gravité
     compteur = 0
 
-
+    # -------- Initialisation du filtre de Kalman d'ordre 2 --------
+    initial_position = (0, 0)
+    kalman_filter = KalmanFilter(frameTime, initial_position, PIXEL_TO_METERS)
+    predicted_position = initial_position # Position prédite initialisée
 
     # ------------ Tant que la vidéo est lue ------------------
     while cap.isOpened():
@@ -61,6 +66,11 @@ def etude_video(video_path, upper_range, lower_range):
         mask = cv.inRange(hsv, lower_range, upper_range)
         contours, hierarchy = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
+        # -------- Prédiction de la position à chaque frame (avant même la détection) --------
+        predicted_state = kalman_filter.predict()
+        predicted_position = (int(predicted_state[0, 0]), int(predicted_state[1, 0])) # Extraction de x et y prédits
+
+
         # ----------- Si les contours de l'objet sont bien détectés -------------
         if contours:
 
@@ -78,11 +88,20 @@ def etude_video(video_path, upper_range, lower_range):
             cX = int(moment_mask["m10"] / moment_mask["m00"])
             cY = int(moment_mask["m01"] / moment_mask["m00"])
             centroid = (cX,cY)
-            cv.circle(transform, centroid, 4, (255, 0, 0), -1)
+            cv.circle(transform, centroid, 4, (255, 0, 0), -1) # Cercle bleu pour la détection
 
-            trajectoire.append(centroid)
+            # -------- Mise à jour du filtre de Kalman avec la détection --------
+            measurement = np.matrix([[cX], [cY]]) # Mesure = centroïde détecté
+            kalman_filter.update(measurement)
+
+            # -------- Mise à jour de la position prédite (après l'update, le filtre a une meilleure estimation) -----
+            predicted_state = kalman_filter.predict() # On refait une prédiction après l'update pour avoir la position la plus à jour
+            predicted_position = (int(predicted_state[0, 0]), int(predicted_state[1, 0]))
+
+            trajectoire.append(centroid) # On ajoute le centroïde détecté à la trajectoire (pour la visualisation)
             for point in trajectoire:
                 cv.circle(transform, point, 3, (0, 255, 255), -1)  # Trajectoire en jaune
+
 
             # ----------- Calcul de l'angle initial de la balle -----------------
             # v0 : vitesse initiale quand la balle ARRIVE sur la vidéo (pas la vraie vitesse initiale)
@@ -97,10 +116,6 @@ def etude_video(video_path, upper_range, lower_range):
                         (x2, y2) = trajectoire[i-1]
                         hauteur_max = y2 * PIXEL_TO_METERS
                         v0 = math.sqrt(2*g*hauteur_max)/math.sin(angle_init)
-
-                # Composantes de v0
-                v0x = v0 * math.cos(angle_init)
-                v0y = v0 * math.sin(angle_init)
 
                 if compteur == 0:
                     print(f"Vitesse initiale : {v0:.2f} m/s, Angle initial : {math.degrees(angle_init):.2f}°")
@@ -131,7 +146,9 @@ def etude_video(video_path, upper_range, lower_range):
             previous_centroid = centroid
             previous_frame_time = current_frame_time
 
-            # ------------ Calcul de la trajectoire approximée ------------------
+        # -------- Affichage de la position prédite (même si pas de détection) --------
+        cv.circle(transform, predicted_position, 5, (0, 0, 255), -1) # Cercle rouge pour la position prédite
+
 
         cv.imshow('resultat', transform)
         k = cv.waitKey(5) & 0xFF
@@ -150,12 +167,13 @@ if __name__ == "__main__":
 
     # BALLE DE RUGBY
     balle_rugby = "Video/rugby_tab.mp4"
+    lower_rugby = np.array([90, 200, 30])
+    upper_rugby = np.array([110, 255, 120])
 
     # BALLE JAUNE
     balle_jaune = "Video/tennis_tab.mp4"
     lower_yellow = np.array([20, 80, 100])
     upper_yellow = np.array([40, 255, 255])
 
-    # etude_video(balle_rouge, upper_red, lower_red)
-    etude_video(balle_jaune, upper_yellow, lower_yellow)
+    etude_video(balle_rouge, upper_red, lower_red)
 
