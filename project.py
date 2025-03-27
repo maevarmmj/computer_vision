@@ -36,6 +36,9 @@ def etude_video(video_path, upper_range, lower_range):
     kalman_filter = KalmanFilter(frameTime, initial_position, PIXEL_TO_METERS)
     predicted_position = initial_position # Position prédite initialisée
 
+    prediction_points_count = 30  # Prédiction de 30 points après la fin de détection de la balle
+    future_trajectory_points = []  # Liste pour stocker les points de la trajectoire future
+
     # ------------ Tant que la vidéo est lue ------------------
     while cap.isOpened():
         ret, frame = cap.read()
@@ -100,7 +103,7 @@ def etude_video(video_path, upper_range, lower_range):
 
             trajectoire.append(centroid) # On ajoute le centroïde détecté à la trajectoire (pour la visualisation)
             for point in trajectoire:
-                cv.circle(transform, point, 3, (0, 255, 255), -1)  # Trajectoire en jaune
+                cv.circle(transform, point, 3, (52, 235, 208), -1)  # Trajectoire en jaune
 
 
             # ----------- Calcul de l'angle initial de la balle -----------------
@@ -120,6 +123,21 @@ def etude_video(video_path, upper_range, lower_range):
                 if compteur == 0:
                     print(f"Vitesse initiale : {v0:.2f} m/s, Angle initial : {math.degrees(angle_init):.2f}°")
                     compteur += 1
+
+                # ---------- Tracé de la trajecetoire -----------
+                if len(trajectoire) > 2:
+                    for i in range(2, len(trajectoire)):
+                        cx, cy = trajectoire[i]
+                        bx, by = trajectoire[i - 1]
+                        ax, ay = trajectoire[i - 2]
+
+                        pts = np.array([[cx, cy], [bx, by], [ax, ay]], np.int32)
+                        coeffs = np.polyfit(pts[:, 0], pts[:, 1], 2)
+                        poly = np.poly1d(coeffs)
+                        xarr = np.linspace(ax, cx, num=50)
+                        yarr = poly(xarr)
+                        parab_pts = np.array([xarr.astype(int), yarr.astype(int)], dtype=np.int32).T
+                        cv.polylines(transform, [parab_pts], False, (52, 235, 208), 1)
 
             # ------------ Calcul de l'angle et de la vitesse instantanée ------------------
 
@@ -146,10 +164,29 @@ def etude_video(video_path, upper_range, lower_range):
             previous_centroid = centroid
             previous_frame_time = current_frame_time
 
-        # -------- Affichage de la position prédite (même si pas de détection) --------
-        cv.circle(transform, predicted_position, 5, (0, 0, 255), -1) # Cercle rouge pour la position prédite
+            future_trajectory_points = []
 
+            # -------- Affichage de la position prédite (même si pas de détection) --------
 
+        else:
+            future_trajectory_points = []
+            temp_kalman_filter = KalmanFilter(kalman_filter.dt, (kalman_filter.E[0, 0], kalman_filter.E[1, 0]),
+                                              kalman_filter.pixel_to_meters)  # Créer une copie temporaire du filtre
+            temp_kalman_filter.E = kalman_filter.E.copy()  # Copier l'état actuel
+            temp_kalman_filter.P = kalman_filter.P.copy()  # Copier la covariance actuelle
+
+            for _ in range(prediction_points_count):
+                predicted_future_state = temp_kalman_filter.predict()
+                predicted_future_position = (int(predicted_future_state[0, 0]), int(predicted_future_state[1, 0]))
+                future_trajectory_points.append(predicted_future_position)
+
+        # -------- Affichage de la position prédite (temps réel) --------
+        cv.circle(transform, predicted_position, 5, (0, 0, 255), -1) # En rouge
+
+        # -------- Affichage de la trajectoire future prédite (points plus espacés) --------
+        for future_point in future_trajectory_points:
+            cv.circle(transform, future_point, 3, (0, 255, 0), -1) # En vert
+        
         cv.imshow('resultat', transform)
         k = cv.waitKey(5) & 0xFF
         if cv.waitKey(int(frameTime * 1000)) & 0xFF == ord('q'):
