@@ -1,6 +1,6 @@
 import math
 import cv2 as cv
-from kalman_filter import *
+import numpy as np
 
 # --------- Calcul du moment pour la vitesse instantanée -------
 def calculate_moment(mask):
@@ -15,6 +15,7 @@ def etude_video(video_path, upper_range, lower_range):
     frameTime = 1.0 / frameRate
     angle_init = 0
     v0 = 0
+
     v0y = 0
     v0x = 0
     x1 = 0
@@ -27,6 +28,8 @@ def etude_video(video_path, upper_range, lower_range):
     previous_frame_time = None  # Dernier timestamp
     g = 9.81  # Coefficient gravité
     compteur = 0
+
+
 
     # ------------ Tant que la vidéo est lue ------------------
     while cap.isOpened():
@@ -150,9 +153,9 @@ if __name__ == "__main__":
 
     # BALLE JAUNE
     balle_jaune = "Video/tennis_tab.mp4"
-    lower_yellow = np.array([20, 100, 100])
-    upper_yellow = np.array([35, 255, 255])
+    lower_yellow = np.array([20, 80, 100])
+    upper_yellow = np.array([40, 255, 255])
 
-    etude_video(balle_rouge, upper_red, lower_red)
-    # etude_video(balle_jaune, upper_yellow, lower_yellow)
+    # etude_video(balle_rouge, upper_red, lower_red)
+    etude_video(balle_jaune, upper_yellow, lower_yellow)
 
