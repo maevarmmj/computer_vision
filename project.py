@@ -1,46 +1,30 @@
 import math
-import time
 import cv2 as cv
-import numpy as np
+from kalman_filter import *
 
-
+# --------- Calcul du moment pour la vitesse instantanée -------
 def calculate_moment(mask):
     moments = cv.moments(mask)
     return moments
 
 
-def calculate_trajectoire(v0, angle, g=9.81, n_points=100):
-    angle_rad = math.radians(angle)
-    v0x = v0 * math.cos(angle_rad)
-    v0y = v0 * math.sin(angle_rad)
-
-    T = 2 * v0y / g  # Temps de vol total
-    R = v0x * T  # Portée
-
-    t = np.linspace(0, T, n_points)
-    x = v0x * t
-    y = v0y * t - 0.5 * g * t ** 2
-
-    return x, y
-
-
 def etude_video(video_path, upper_range, lower_range):
-    # --------- Calcul du moment pour la vitesse instantanée -------
-
     # --------- Initialisation des paramètres -----------------
     cap = cv.VideoCapture(video_path)
-    frameTime = 1 # Temps d'une frame
-    trajectoire = []
+    frameRate = 30.0  # Frame / s
+    frameTime = 1.0 / frameRate
     angle_init = 0
     v0 = 0
     v0y = 0
     v0x = 0
     x1 = 0
     y1 = 0
+    trajectoire = []
 
     PIXEL_TO_METERS = 0.00185 # Coeff de proportionnalité entre les dimensions réelles et les dimensions utilisées dans la vidéo
+    frame_counter = 0
     previous_centroid = None  # Dernière position connue de la balle
-    previous_time = None  # Dernier timestamp
+    previous_frame_time = None  # Dernier timestamp
     g = 9.81  # Coefficient gravité
     compteur = 0
 
@@ -69,13 +53,10 @@ def etude_video(video_path, upper_range, lower_range):
         M = cv.getPerspectiveTransform(pts1, pts2)
         transform = cv.warpPerspective(frame, M, (1080, 621)) # Facteur 1,85 entre les dim réelles et finales
 
-
         # ---------- Partie détection de l'objet -------------
         hsv = cv.cvtColor(transform, cv.COLOR_BGR2HSV)
         mask = cv.inRange(hsv, lower_range, upper_range)
         contours, hierarchy = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-
-        res = cv.bitwise_and(transform, transform, mask=mask) # Masque avec l'objet uniquement (non affiché)
 
         # ----------- Si les contours de l'objet sont bien détectés -------------
         if contours:
@@ -94,12 +75,11 @@ def etude_video(video_path, upper_range, lower_range):
             cX = int(moment_mask["m10"] / moment_mask["m00"])
             cY = int(moment_mask["m01"] / moment_mask["m00"])
             centroid = (cX,cY)
-            cv.circle(transform, centroid, 4, (255, 0, 0), -1) # Centroïde dessiné
+            cv.circle(transform, centroid, 4, (255, 0, 0), -1)
 
             trajectoire.append(centroid)
             for point in trajectoire:
-                cv.circle(transform, point, 3, (0, 255, 255), -1)  # Tracé de la trajectoire
-
+                cv.circle(transform, point, 3, (0, 255, 255), -1)  # Trajectoire en jaune
 
             # ----------- Calcul de l'angle initial de la balle -----------------
             # v0 : vitesse initiale quand la balle ARRIVE sur la vidéo (pas la vraie vitesse initiale)
@@ -107,7 +87,7 @@ def etude_video(video_path, upper_range, lower_range):
                 (x1, y1) = trajectoire[0]
                 (x2, y2) = trajectoire[1]
 
-                angle_init = math.degrees(math.atan2(y2 - y1, x2 - x1))
+                angle_init = - math.atan2((y2 - y1), (x2 - x1))
 
                 for i in range (len(trajectoire)-1):
                     if trajectoire[i-1] > trajectoire[i]:
@@ -120,7 +100,7 @@ def etude_video(video_path, upper_range, lower_range):
                 v0y = v0 * math.sin(angle_init)
 
                 if compteur == 0:
-                    print(f"Vitesse initiale : {v0:.2f} m/s, Angle initial : {angle_init:.2f}°")
+                    print(f"Vitesse initiale : {v0:.2f} m/s, Angle initial : {math.degrees(angle_init):.2f}°")
                     compteur += 1
 
             # ------------ Calcul de l'angle et de la vitesse instantanée ------------------
@@ -131,29 +111,30 @@ def etude_video(video_path, upper_range, lower_range):
 
             angle = math.degrees(0.5 * math.atan2(2 * mu11, mu20 - mu02))
 
-            current_time = time.time()
-            if previous_centroid is not None and previous_time is not None:
+            current_frame_time = frame_counter * frameTime
+            if previous_centroid is not None and previous_frame_time is not None:
                 x_prev, y_prev = previous_centroid
-                delta_t = current_time - previous_time  # Temps en secondes
+                delta_t = current_frame_time - previous_frame_time  # Temps en secondes
                 if delta_t > 0:
                     v_x = (x_prev - cX) / delta_t
-                    v_y = (y_prev - cY) / delta_t - (g * delta_t) / 2
+                    v_y = (y_prev - cY) / delta_t
                     v_x = v_x * PIXEL_TO_METERS
                     v_y = v_y * PIXEL_TO_METERS
                     v = math.sqrt(v_x ** 2 + v_y ** 2)
                     print(f"Vitesse instantanée : {v:.2f} m/s")
                     cv.putText(transform, f"{v:.2f} m/s", (cX + 20, cY - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
                     cv.putText(transform, f"{angle:.2f} deg", (cX + 20, cY - 30), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
-
+            frame_counter += 1
             previous_centroid = centroid
-            previous_time = current_time
+            previous_frame_time = current_frame_time
 
             # ------------ Calcul de la trajectoire approximée ------------------
 
-
+        cv.imshow('resultat', transform)
         k = cv.waitKey(5) & 0xFF
-        if cv.waitKey(frameTime) & 0xFF == ord('q'):
+        if cv.waitKey(int(frameTime * 1000)) & 0xFF == ord('q'):
             break
+
 
     cap.release()
     cv.destroyAllWindows()
