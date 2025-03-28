@@ -3,6 +3,27 @@ import cv2 as cv
 import numpy as np
 from KalmanFilter import KalmanFilter
 
+# --------- Tracé de parabole -------------------
+
+def trace_parabole(trajectoire):
+    pts_parabole = None
+    coeffs = None
+
+    if len(trajectoire) > 2:
+        listcX, listcY = [],[]
+        for centroid in trajectoire:
+            listcX.append(centroid[0])
+            listcY.append(centroid[1])
+        if (len(listcX) > 2):
+            coeffs = np.polyfit(listcX, listcY, 2)
+        if coeffs is not None:
+            poly = np.poly1d(coeffs)
+            x_range = np.linspace(0, 1080, 100)
+            y_range = poly(x_range)
+            pts_parabole = np.array([x_range, y_range], dtype=np.int32).T
+
+    return pts_parabole
+
 
 # --------- Calcul du moment pour la vitesse instantanée -------
 def calculate_moment(mask):
@@ -15,14 +36,15 @@ def etude_video(video_path, upper_range, lower_range):
     cap = cv.VideoCapture(video_path)
     frameRate = 30.0  # Frame / s
     frameTime = 1.0 / frameRate
-    angle_init = 0
     v0 = 0
-
-    v0y = 0
-    v0x = 0
-    x1 = 0
-    y1 = 0
+    xmax, ymax = 0, 0
+    area_min = 0
+    angle_init = 0
+    distance_totale = 0
+    distance_predite = distance_totale
+    hauteur = 1 # Hauteur entre le sol et le bas du tableau en m
     trajectoire = []
+    trajectoire_predite = []
 
     PIXEL_TO_METERS = 0.00185 # Coeff de proportionnalité entre les dimensions réelles et les dimensions utilisées dans la vidéo
     frame_counter = 0
@@ -30,6 +52,7 @@ def etude_video(video_path, upper_range, lower_range):
     previous_frame_time = None  # Dernier timestamp
     g = 9.81  # Coefficient gravité
     compteur = 0
+    compteur_v0 = 0
 
     # -------- Initialisation du filtre de Kalman d'ordre 2 --------
     initial_position = (0, 0)
@@ -49,10 +72,10 @@ def etude_video(video_path, upper_range, lower_range):
             break
 
         # ------------- Partie sur l'homographie -----------------
-        point_hg = (120, 5)
-        point_hd = (690, 330)
-        point_bg = (20, 525)
-        point_bd = (675, 590)
+        point_hg = (125, 10)
+        point_hd = (685, 332)
+        point_bg = (25, 522)
+        point_bd = (672, 590)
         pts1 = np.float32([point_hg, point_hd, point_bg, point_bd]) # Points du tableau sur la video
 
         point_hg_new = (0, 0)
@@ -64,10 +87,11 @@ def etude_video(video_path, upper_range, lower_range):
         M = cv.getPerspectiveTransform(pts1, pts2)
         transform = cv.warpPerspective(frame, M, (1080, 621)) # Facteur 1,85 entre les dim réelles et finales
 
+
         # ---------- Partie détection de l'objet -------------
         hsv = cv.cvtColor(transform, cv.COLOR_BGR2HSV)
         mask = cv.inRange(hsv, lower_range, upper_range)
-        contours, hierarchy = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
         # -------- Prédiction de la position à chaque frame (avant même la détection) --------
         predicted_state = kalman_filter.predict()
@@ -84,6 +108,8 @@ def etude_video(video_path, upper_range, lower_range):
 
             # ---------- Création de la boîte englobante -----------
             x, y, w, h = cv.boundingRect(largest_contour)
+            area = cv.contourArea(largest_contour)
+
             cv.rectangle(transform, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
             # ----------- Calcul du centroïde + trajectoire ---------------------
@@ -107,37 +133,24 @@ def etude_video(video_path, upper_range, lower_range):
 
 
             # ----------- Calcul de l'angle initial de la balle -----------------
-            # v0 : vitesse initiale quand la balle ARRIVE sur la vidéo (pas la vraie vitesse initiale)
             if len(trajectoire) > 1:
                 (x1, y1) = trajectoire[0]
                 (x2, y2) = trajectoire[1]
 
                 angle_init = - math.atan2((y2 - y1), (x2 - x1))
-
-                for i in range (len(trajectoire)-1):
-                    if trajectoire[i-1] > trajectoire[i]:
-                        (x2, y2) = trajectoire[i-1]
-                        hauteur_max = y2 * PIXEL_TO_METERS
-                        v0 = math.sqrt(2*g*hauteur_max)/math.sin(angle_init)
-
-                if compteur == 0:
-                    print(f"Vitesse initiale : {v0:.2f} m/s, Angle initial : {math.degrees(angle_init):.2f}°")
+                x_prev, y_prev = previous_centroid
+                x_current, y_current = centroid
+                if y_prev < y_current and compteur == 0:
+                    (xmax, ymax) = previous_centroid
+                    hauteur_max = ymax * PIXEL_TO_METERS
                     compteur += 1
+                if (xmax, ymax) != (0,0):
+                    cv.line(transform, (xmax, ymax), (xmax, 621), (255, 0, 255), 2)
 
                 # ---------- Tracé de la trajecetoire -----------
-                if len(trajectoire) > 2:
-                    for i in range(2, len(trajectoire)):
-                        cx, cy = trajectoire[i]
-                        bx, by = trajectoire[i - 1]
-                        ax, ay = trajectoire[i - 2]
 
-                        pts = np.array([[cx, cy], [bx, by], [ax, ay]], np.int32)
-                        coeffs = np.polyfit(pts[:, 0], pts[:, 1], 2)
-                        poly = np.poly1d(coeffs)
-                        xarr = np.linspace(ax, cx, num=50)
-                        yarr = poly(xarr)
-                        parab_pts = np.array([xarr.astype(int), yarr.astype(int)], dtype=np.int32).T
-                        cv.polylines(transform, [parab_pts], False, (52, 235, 208), 1)
+            parabole = trace_parabole(trajectoire)
+            cv.polylines(transform, [parabole], False, (52, 235, 208), 1)
 
             # ------------ Calcul de l'angle et de la vitesse instantanée ------------------
 
@@ -157,7 +170,12 @@ def etude_video(video_path, upper_range, lower_range):
                     v_x = v_x * PIXEL_TO_METERS
                     v_y = v_y * PIXEL_TO_METERS
                     v = math.sqrt(v_x ** 2 + v_y ** 2)
-                    print(f"Vitesse instantanée : {v:.2f} m/s")
+                    if compteur_v0 == 0 :
+                        v0 = v
+                        print(f"Vitesse initiale : {v:.2f} m/s")
+                        compteur_v0 += 1
+                    else:
+                        print(f"Vitesse instantanée : {v:.2f} m/s")
                     cv.putText(transform, f"{v:.2f} m/s", (cX + 20, cY - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
                     cv.putText(transform, f"{angle:.2f} deg", (cX + 20, cY - 30), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
             frame_counter += 1
@@ -180,15 +198,27 @@ def etude_video(video_path, upper_range, lower_range):
                 predicted_future_position = (int(predicted_future_state[0, 0]), int(predicted_future_state[1, 0]))
                 future_trajectory_points.append(predicted_future_position)
 
+            parabole_suite = trace_parabole(trajectoire) # Juste pour afficher la parabole même lorsque la balle n'est plus détectée
+            cv.polylines(transform, [parabole_suite], False, (52, 235, 208), 1)
+            if (xmax, ymax) != (0, 0):
+                cv.line(transform, (xmax, ymax), (xmax, 621), (255, 0, 255), 2)
+
         # -------- Affichage de la position prédite (temps réel) --------
         cv.circle(transform, predicted_position, 5, (0, 0, 255), -1) # En rouge
 
         # -------- Affichage de la trajectoire future prédite (points plus espacés) --------
         for future_point in future_trajectory_points:
             cv.circle(transform, future_point, 3, (0, 255, 0), -1) # En vert
-        
+
+
+        # ---------- Calcul distance parcourue par la balle + distance prédite par Kalman ------------
+        distance_totale = v0 / g * math.cos(angle_init) * (
+                v0 * math.sin(angle_init) + math.sqrt((v0 * math.sin(angle_init)) ** 2 + 2 * g * hauteur))
+        if distance_totale != 0:
+            print(f"Distance totale parcourue par la balle : {distance_totale:.2f} m")
+
         cv.imshow('resultat', transform)
-        k = cv.waitKey(5) & 0xFF
+        cv.waitKey(200) & 0xFF
         if cv.waitKey(int(frameTime * 1000)) & 0xFF == ord('q'):
             break
 
@@ -204,13 +234,13 @@ if __name__ == "__main__":
 
     # BALLE DE RUGBY
     balle_rugby = "Video/rugby_tab.mp4"
-    lower_rugby = np.array([90, 200, 30])
     upper_rugby = np.array([110, 255, 120])
+    lower_rugby = np.array([90, 200, 30])
 
     # BALLE JAUNE
     balle_jaune = "Video/tennis_tab.mp4"
-    lower_yellow = np.array([20, 80, 100])
     upper_yellow = np.array([40, 255, 255])
+    lower_yellow = np.array([20, 80, 100])
 
     etude_video(balle_rouge, upper_red, lower_red)
 

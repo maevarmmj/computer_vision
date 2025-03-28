@@ -27,7 +27,7 @@ class KalmanFilter(object):
                           [0, 0, 0, 0, self.coeffQ, 0],
                           [0, 0, 0, 0, 0, self.coeffQ]])
 
-        self.coeffR = 1e-15
+        self.coeffR = 1e-3
         self.R=np.matrix([[self.coeffR, 0],
                           [0, self.coeffR]])
 
