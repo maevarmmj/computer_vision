@@ -320,4 +320,4 @@ if __name__ == "__main__":
     upper_yellow = np.array([40, 255, 255])
     lower_yellow = np.array([20, 80, 100])
 
-    etude_video(balle_rouge, upper_red, lower_red)
+    etude_video(balle_jaune, upper_yellow, lower_yellow)

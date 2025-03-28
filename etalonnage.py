@@ -3,7 +3,7 @@ import cv2 as cv
 import glob
 
 
-def étalonnage():
+def etalonnage():
     # termination criteria
     criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
@@ -53,6 +53,5 @@ def étalonnage():
         print("\nErreur : Aucun damier détecté, calibration impossible.")
         return None, None
 
-
-# Exécution
-étalonnage()
+if __name__ == "__main__":
+    etalonnage()
