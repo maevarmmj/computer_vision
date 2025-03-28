@@ -112,6 +112,9 @@ def etude_video(video_path, upper_range, lower_range):
         frame = cv.resize(frame, (0,0), fx=0.7, fy=0.7)
 
         # ------------- Partie sur l'homographie -----------------
+        WIDTH = 1080
+        HEIGHT = 621
+
         point_hg = (125, 10)
         point_hd = (685, 332)
         point_bg = (25, 522)
@@ -119,13 +122,14 @@ def etude_video(video_path, upper_range, lower_range):
         pts1 = np.float32([point_hg, point_hd, point_bg, point_bd]) # Points du tableau sur la video
 
         point_hg_new = (0, 0)
-        point_hd_new = (1080, 0)
-        point_bg_new = (0, 621)
-        point_bd_new = (1080, 621)
+        point_hd_new = (WIDTH, 0)
+        point_bg_new = (0, HEIGHT)
+        point_bd_new = (WIDTH, HEIGHT)
         pts2 = np.float32([point_hg_new, point_hd_new, point_bg_new, point_bd_new]) # Points finaux
 
         M = cv.getPerspectiveTransform(pts1, pts2)
-        transform = cv.warpPerspective(frame, M, (1080, 621)) # Facteur 1,85 entre les dim réelles et finales (-> PIXEL_TO_METERS)
+
+        transform = cv.warpPerspective(frame, M, (WIDTH, HEIGHT)) # Facteur 1,85 entre les dim réelles et finales (-> PIXEL_TO_METERS)
 
 
         # ---------- Partie détection de l'objet -------------
@@ -254,9 +258,9 @@ def etude_video(video_path, upper_range, lower_range):
 
         # -------- Tracé de la hauteur max (juste pour la comparaison) --------------
         if (xmax, ymax) != (0, 0):
-            cv.line(transform, (xmax, ymax), (xmax, 621), (52, 235, 208), 1) # Hauteur max courbe réelle
+            cv.line(transform, (xmax, ymax), (xmax, HEIGHT), (52, 235, 208), 1) # Hauteur max courbe réelle
         if (xmax_pred, ymax_pred) != (0, 0):
-            cv.line(transform, (xmax_pred, ymax_pred), (xmax_pred, 621), (255, 255, 0), 1) # Hauteur max courbe prédite
+            cv.line(transform, (xmax_pred, ymax_pred), (xmax_pred, HEIGHT), (255, 255, 0), 1) # Hauteur max courbe prédite
 
         # ----------- Tracé de parabole -------------------
         parabole = trace_parabole(trajectoire)
@@ -268,12 +272,12 @@ def etude_video(video_path, upper_range, lower_range):
             cv.circle(transform, point, 4, (255, 255, 0), -1)  # Trajectoire en cyan
 
 
-        cv.putText(transform, f"Vitesse mesuree : {v:.2f} m/s", (point_bg_new[0] + 20, point_bg_new[1] - 180), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-        cv.putText(transform, f"Vitesse predite : {v_pred:.2f} m/s", (point_bg_new[0] + 20, point_bg_new[1] - 160), cv.FONT_HERSHEY_SIMPLEX, 0.5,
+        cv.putText(transform, f"Vitesse mesuree : {v:.2f} m/s", (point_bg_new[0] + 20, point_bg_new[1] - 140), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+        cv.putText(transform, f"Vitesse predite : {v_pred:.2f} m/s", (point_bg_new[0] + 20, point_bg_new[1] - 120), cv.FONT_HERSHEY_SIMPLEX, 0.5,
                    (255, 255, 0), 2)
 
         # -------- Affichage angle initial + vitesse initiale -------------
-        affichage_video(transform,"ANGLE :",math.degrees(angle_init), math.degrees(angle_init_pred), "deg" , point_bg_new[0] + 20, point_bg_new[1] - 60,20)
+        affichage_video(transform,"ANGLE :",math.degrees(angle_init), math.degrees(angle_init_pred), "deg" , point_bg_new[0] + 20, point_bg_new[1] - 20,20)
         affichage_video(transform,"VITESSE INITIALE :",v0, v0_pred, "m/s", point_bg_new[0] + 400, point_bg_new[1] - 120,20)
 
 
