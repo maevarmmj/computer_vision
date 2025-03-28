@@ -3,6 +3,27 @@ import cv2 as cv
 import numpy as np
 from KalmanFilter import KalmanFilter
 
+# --------- Affichage des métriques -------------
+def affichage_video(frame, titre, param, param_pred, unite, x, y, decalY):
+    cv.putText(frame, titre,
+               (x, y - (decalY+40)), cv.FONT_HERSHEY_SIMPLEX, 0.5,
+               (255, 255, 255), 2)
+    cv.putText(frame, f"{titre} {param:.2f} {unite}",
+               (x, y - decalY), cv.FONT_HERSHEY_SIMPLEX, 0.5,
+               (255, 255, 255), 2)
+    cv.putText(frame, f"Prediction {titre} {param_pred:.2f} {unite}",
+               (x, y - (decalY+20)), cv.FONT_HERSHEY_SIMPLEX, 0.5,
+               (255, 255, 255), 2)
+    if param != 0:
+        cv.putText(frame, f"ERREUR: {((param_pred-param)/abs(param))*100:.2f} %",
+               (x, y - (decalY-20)), cv.FONT_HERSHEY_SIMPLEX, 0.5,
+               (31, 173, 255), 2)
+    else:
+        cv.putText(frame, "ERREUR: 0 %",
+               (x, y - (decalY-20)), cv.FONT_HERSHEY_SIMPLEX, 0.5,
+               (31, 173, 255), 2)
+
+
 # --------- Tracé de parabole -------------------
 
 def trace_parabole(trajectoire):
@@ -14,7 +35,7 @@ def trace_parabole(trajectoire):
         for centroid in trajectoire:
             listcX.append(centroid[0])
             listcY.append(centroid[1])
-        if (len(listcX) > 2):
+        if len(listcX) > 2:
             coeffs = np.polyfit(listcX, listcY, 2)
         if coeffs is not None:
             poly = np.poly1d(coeffs)
@@ -23,6 +44,12 @@ def trace_parabole(trajectoire):
             pts_parabole = np.array([x_range, y_range], dtype=np.int32).T
 
     return pts_parabole
+
+# --------- Calcul distance ------------------
+def calcul_distance(v0, angle, g, h):
+    distance = (v0 / g) * math.cos(angle) * (
+                v0 * math.sin(angle) + math.sqrt((v0 * math.sin(angle)) ** 2 + 2 * g * h))
+    return distance
 
 
 # --------- Calcul du moment pour la vitesse instantanée -------
@@ -37,11 +64,15 @@ def etude_video(video_path, upper_range, lower_range):
     frameRate = 30.0  # Frame / s
     frameTime = 1.0 / frameRate
     v0 = 0
+    v0_pred = 0
     xmax, ymax = 0, 0
+    xmax_pred, ymax_pred = 0, 0
     area_min = 0
     angle_init = 0
+    angle_init_pred = 0
     distance_totale = 0
-    distance_predite = distance_totale
+    hauteur_max = 0
+    distance_pred = distance_totale
     hauteur = 1 # Hauteur entre le sol et le bas du tableau en m
     trajectoire = []
     trajectoire_predite = []
@@ -49,10 +80,12 @@ def etude_video(video_path, upper_range, lower_range):
     PIXEL_TO_METERS = 0.00185 # Coeff de proportionnalité entre les dimensions réelles et les dimensions utilisées dans la vidéo
     frame_counter = 0
     previous_centroid = None  # Dernière position connue de la balle
+    previous_pred_centroid = None
     previous_frame_time = None  # Dernier timestamp
     g = 9.81  # Coefficient gravité
     compteur = 0
     compteur_v0 = 0
+    compteur_pred = 0
 
     # -------- Initialisation du filtre de Kalman d'ordre 2 --------
     initial_position = (0, 0)
@@ -95,8 +128,7 @@ def etude_video(video_path, upper_range, lower_range):
 
         # -------- Prédiction de la position à chaque frame (avant même la détection) --------
         predicted_state = kalman_filter.predict()
-        predicted_position = (int(predicted_state[0, 0]), int(predicted_state[1, 0])) # Extraction de x et y prédits
-
+        predicted_centroid = (int(predicted_state[0, 0]), int(predicted_state[1, 0]))  # Extraction de x et y prédits
 
         # ----------- Si les contours de l'objet sont bien détectés -------------
         if contours:
@@ -109,9 +141,16 @@ def etude_video(video_path, upper_range, lower_range):
             # ---------- Création de la boîte englobante -----------
             x, y, w, h = cv.boundingRect(largest_contour)
             area = cv.contourArea(largest_contour)
-
             cv.rectangle(transform, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
+            if video_path == "Video/Mousse_new.mp4":
+                area_min = 1000
+            elif video_path == "Video/rugby_tab.mp4":
+                area_min = 5900
+            elif video_path == "Video/rugby_tab.mp4":
+                area_min = 300
+
+            
             # ----------- Calcul du centroïde + trajectoire ---------------------
             moment_mask = calculate_moment(mask)
             cX = int(moment_mask["m10"] / moment_mask["m00"])
@@ -125,61 +164,69 @@ def etude_video(video_path, upper_range, lower_range):
 
             # -------- Mise à jour de la position prédite (après l'update, le filtre a une meilleure estimation) -----
             predicted_state = kalman_filter.predict() # On refait une prédiction après l'update pour avoir la position la plus à jour
-            predicted_position = (int(predicted_state[0, 0]), int(predicted_state[1, 0]))
+            predicted_centroid = (int(predicted_state[0, 0]), int(predicted_state[1, 0]))
+            cX_pred, cY_pred = predicted_centroid
+            trajectoire_predite.append(predicted_centroid)
+            trajectoire.append(centroid)
 
-            trajectoire.append(centroid) # On ajoute le centroïde détecté à la trajectoire (pour la visualisation)
-            for point in trajectoire:
-                cv.circle(transform, point, 3, (52, 235, 208), -1)  # Trajectoire en jaune
 
 
-            # ----------- Calcul de l'angle initial de la balle -----------------
-            if len(trajectoire) > 1:
+            # ----------- Calcul de l'angle initial de la balle + angle initial prédit -----------------
+            if len(trajectoire) > 1 and len(trajectoire_predite) > 1:
                 (x1, y1) = trajectoire[0]
                 (x2, y2) = trajectoire[1]
+                (x1_pred, y1_pred) = trajectoire_predite[0]
+                (x2_pred, y2_pred) = trajectoire_predite[1]
 
                 angle_init = - math.atan2((y2 - y1), (x2 - x1))
+                angle_init_pred = - math.atan2((y2_pred - y1_pred), (x2_pred - x1_pred))
+
                 x_prev, y_prev = previous_centroid
                 x_current, y_current = centroid
+                x_prev_pred, x_prev_pred = previous_pred_centroid
+                x_current_pred, y_current_pred = predicted_centroid
+
                 if y_prev < y_current and compteur == 0:
                     (xmax, ymax) = previous_centroid
-                    hauteur_max = ymax * PIXEL_TO_METERS
                     compteur += 1
-                if (xmax, ymax) != (0,0):
-                    cv.line(transform, (xmax, ymax), (xmax, 621), (255, 0, 255), 2)
 
-                # ---------- Tracé de la trajecetoire -----------
+                if x_prev_pred < y_current_pred and compteur_pred == 0:
+                    (xmax_pred, ymax_pred) = previous_pred_centroid
+                    compteur_pred += 1
 
-            parabole = trace_parabole(trajectoire)
-            cv.polylines(transform, [parabole], False, (52, 235, 208), 1)
 
             # ------------ Calcul de l'angle et de la vitesse instantanée ------------------
 
-            mu20 = moment_mask['mu20'] / moment_mask['m00']
-            mu02 = moment_mask['mu02'] / moment_mask['m00']
-            mu11 = moment_mask['mu11'] / moment_mask['m00']
-
-            angle = math.degrees(0.5 * math.atan2(2 * mu11, mu20 - mu02))
-
             current_frame_time = frame_counter * frameTime
-            if previous_centroid is not None and previous_frame_time is not None:
+            if previous_centroid is not None and previous_pred_centroid is not None and previous_frame_time is not None:
                 x_prev, y_prev = previous_centroid
+                x_prev_pred, y_prev_pred = previous_pred_centroid
                 delta_t = current_frame_time - previous_frame_time  # Temps en secondes
                 if delta_t > 0:
+                    # Pour la partie réelle
                     v_x = (x_prev - cX) / delta_t
                     v_y = (y_prev - cY) / delta_t
                     v_x = v_x * PIXEL_TO_METERS
                     v_y = v_y * PIXEL_TO_METERS
                     v = math.sqrt(v_x ** 2 + v_y ** 2)
-                    if compteur_v0 == 0 :
+                    # Pour la partie prédite
+                    v_x_pred = (x_prev_pred - cX_pred) / delta_t
+                    v_y_pred = (y_prev_pred - cY_pred) / delta_t
+                    v_x_pred = v_x_pred * PIXEL_TO_METERS
+                    v_y_pred = v_y_pred * PIXEL_TO_METERS
+                    v_pred = math.sqrt(v_x_pred ** 2 + v_y_pred ** 2)
+
+                    if compteur_v0 == 0:
                         v0 = v
-                        print(f"Vitesse initiale : {v:.2f} m/s")
+                        v0_pred = v_pred
                         compteur_v0 += 1
-                    else:
-                        print(f"Vitesse instantanée : {v:.2f} m/s")
                     cv.putText(transform, f"{v:.2f} m/s", (cX + 20, cY - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-                    cv.putText(transform, f"{angle:.2f} deg", (cX + 20, cY - 30), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+                    cv.putText(transform, f"{v_pred:.2f} m/s", (cX_pred + 20, cY_pred - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+
             frame_counter += 1
             previous_centroid = centroid
+            previous_pred_centroid = predicted_centroid
             previous_frame_time = current_frame_time
 
             future_trajectory_points = []
@@ -187,7 +234,6 @@ def etude_video(video_path, upper_range, lower_range):
             # -------- Affichage de la position prédite (même si pas de détection) --------
 
         else:
-            future_trajectory_points = []
             temp_kalman_filter = KalmanFilter(kalman_filter.dt, (kalman_filter.E[0, 0], kalman_filter.E[1, 0]),
                                               kalman_filter.pixel_to_meters)  # Créer une copie temporaire du filtre
             temp_kalman_filter.E = kalman_filter.E.copy()  # Copier l'état actuel
@@ -198,27 +244,42 @@ def etude_video(video_path, upper_range, lower_range):
                 predicted_future_position = (int(predicted_future_state[0, 0]), int(predicted_future_state[1, 0]))
                 future_trajectory_points.append(predicted_future_position)
 
-            parabole_suite = trace_parabole(trajectoire) # Juste pour afficher la parabole même lorsque la balle n'est plus détectée
-            cv.polylines(transform, [parabole_suite], False, (52, 235, 208), 1)
-            if (xmax, ymax) != (0, 0):
-                cv.line(transform, (xmax, ymax), (xmax, 621), (255, 0, 255), 2)
+
+        if (xmax, ymax) != (0, 0):
+            cv.line(transform, (xmax, ymax), (xmax, 621), (52, 235, 208), 1) # Hauteur max courbe réelle
+        if (xmax_pred, ymax_pred) != (0, 0):
+            cv.line(transform, (xmax_pred, ymax_pred), (xmax_pred, 621), (0, 0, 208), 1) # Hauteur max courbe prédite
+
+        # -------- Tracé de parabole --------------
+        parabole = trace_parabole(trajectoire)
+        cv.polylines(transform, [parabole], False, (52, 235, 208), 1)
+
+        for point in trajectoire_predite:
+            cv.circle(transform, point, 3, (0, 0, 255), -1)  # Trajectoire en rouge
+
+        for point in trajectoire:
+            cv.circle(transform, point, 3, (52, 235, 208), -1)  # Trajectoire en jaune
+
+        # -------- Affichage angle initial + vitesse initiale -------------
+        affichage_video(transform,"ANGLE :",math.degrees(angle_init), math.degrees(angle_init_pred), "deg" , point_bg_new[0] + 20,point_bg_new[1] - 60,20)
+        affichage_video(transform,"VITESSE INITIALE :",v0, v0_pred, "m/s", point_bg_new[0] + 400,point_bg_new[1] - 120,20)
 
         # -------- Affichage de la position prédite (temps réel) --------
-        cv.circle(transform, predicted_position, 5, (0, 0, 255), -1) # En rouge
+        cv.circle(transform, predicted_centroid, 5, (0, 0, 255), -1) # En rouge
 
-        # -------- Affichage de la trajectoire future prédite (points plus espacés) --------
+        # -------- Affichage de la trajectoire future prédite --------
         for future_point in future_trajectory_points:
-            cv.circle(transform, future_point, 3, (0, 255, 0), -1) # En vert
+            cv.circle(transform, future_point, 3, (255, 0, 0), -1) # En bleu
 
 
         # ---------- Calcul distance parcourue par la balle + distance prédite par Kalman ------------
-        distance_totale = v0 / g * math.cos(angle_init) * (
-                v0 * math.sin(angle_init) + math.sqrt((v0 * math.sin(angle_init)) ** 2 + 2 * g * hauteur))
-        if distance_totale != 0:
-            print(f"Distance totale parcourue par la balle : {distance_totale:.2f} m")
+        distance_totale = calcul_distance(v0, angle_init, g, hauteur)
+        distance_pred = calcul_distance(v0_pred, angle_init_pred, g, hauteur)
+        affichage_video(transform,"DISTANCE :",distance_totale, distance_pred, "m", point_bg_new[0] + 400,point_bg_new[1] - 20,20)
+
 
         cv.imshow('resultat', transform)
-        cv.waitKey(200) & 0xFF
+        cv.waitKey(20) & 0xFF
         if cv.waitKey(int(frameTime * 1000)) & 0xFF == ord('q'):
             break
 
