@@ -15,7 +15,7 @@ def étalonnage():
     objpoints = []  # 3D points in real world space
     imgpoints = []  # 2D points in image plane.
 
-    images = glob.glob("test/*.jpg")
+    images = glob.glob("Checkboard/*.jpg")
 
     for fname in images:
         img = cv.imread(fname)
