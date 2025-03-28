@@ -3,7 +3,7 @@ import cv2 as cv
 import glob
 
 
-def étalonnage():
+def etalonnage():
     # termination criteria
     criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
@@ -54,4 +54,4 @@ def étalonnage():
         return None, None
 
 if __name__ == "__main__":
-    étalonnage()
+    etalonnage()
