@@ -151,11 +151,11 @@ def etude_video(video_path, upper_range, lower_range):
             area = cv.contourArea(largest_contour)
             cv.rectangle(transform, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-            if video_path == "Video/Mousse_new.mp4":
+            if video_path == "Video/Mousse.mp4":
                 area_min = 930
-            elif video_path == "Video/rugby_tab.mp4":
+            elif video_path == "Video/Rugby.mp4":
                 area_min = 5600
-            elif video_path == "Video/tennis_tab.mp4":
+            elif video_path == "Video/Tennis.mp4":
                 area_min = 30
 
             if area > area_min:
@@ -306,17 +306,17 @@ def etude_video(video_path, upper_range, lower_range):
 
 if __name__ == "__main__":
     # BALLE ROUGE
-    balle_rouge = "Video/Mousse_new.mp4"
+    balle_rouge = "Video/Mousse.mp4"
     upper_red = np.array([255, 255, 246])
     lower_red = np.array([0, 135, 22])
 
     # BALLE DE RUGBY
-    balle_rugby = "Video/rugby_tab.mp4"
+    balle_rugby = "Video/Rugby.mp4"
     upper_rugby = np.array([110, 255, 120])
     lower_rugby = np.array([90, 200, 30])
 
     # BALLE JAUNE
-    balle_jaune = "Video/tennis_tab.mp4"
+    balle_jaune = "Video/Tennis.mp4"
     upper_yellow = np.array([40, 255, 255])
     lower_yellow = np.array([20, 80, 100])
 
