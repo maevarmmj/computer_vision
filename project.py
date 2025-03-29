@@ -54,7 +54,7 @@ def calcul_distance(v0, angle, g, h):
     return distance
 
 
-# --------- Calcul du moment pour la vitesse instantanée -------
+# --------- Calcul du moment pour la position du centroïde -------
 
 def calculate_moment(mask):
     moments = cv.moments(mask)
@@ -69,6 +69,9 @@ def etude_video(video_path, upper_range, lower_range):
     PIXEL_TO_METERS = 0.00185 # Coeff de proportionnalité entre les dimensions réelles et les dimensions dans la vidéo
     hauteur = 1 # Hauteur entre le sol et le bas du tableau en m
     g = 9.81  # Coefficient gravité
+    WIDTH = 1080
+    HEIGHT = 621
+
 
     # Initialisation des vitesses initiales
     v0 = v0_pred =  0
@@ -112,9 +115,7 @@ def etude_video(video_path, upper_range, lower_range):
         frame = cv.resize(frame, (0,0), fx=0.7, fy=0.7)
 
         # ------------- Partie sur l'homographie -----------------
-        WIDTH = 1080
-        HEIGHT = 621
-
+        
         point_hg = (125, 10)
         point_hd = (685, 332)
         point_bg = (25, 522)
