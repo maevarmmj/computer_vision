@@ -244,6 +244,14 @@ def etude_video(video_path, upper_range, lower_range):
             # -------- Prédiction de la position même sans détection --------
             predicted_state = kalman_filter.predict()
             predicted_centroid = (int(predicted_state[0, 0]), int(predicted_state[1, 0]))
+            
+            # A verifier car pas sûre : pour afficher la vitesse prédite même après 
+            # arrêt de détection de la balle
+            v_x_pred = predicted_state[2, 0]
+            v_y_pred = predicted_state[3, 0]
+            v_x_pred = v_x_pred * PIXEL_TO_METERS
+            v_y_pred = v_y_pred * PIXEL_TO_METERS
+            v_pred = math.sqrt(v_x_pred ** 2 + v_y_pred ** 2)
 
             # -------- Calcul de la trajectoire future (points bleus foncés) --------
             temp_kalman_filter = KalmanFilter(kalman_filter.dt, (kalman_filter.E[0, 0], kalman_filter.E[1, 0]),
