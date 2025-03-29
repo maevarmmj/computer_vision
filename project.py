@@ -161,7 +161,7 @@ def etude_video(video_path, upper_range, lower_range):
 
             if area > area_min:
 
-                # ----------- Calcul du centroïde + trajectoire ---------------------
+                # ----------- Calcul du centroïde ---------------------
                 moment_mask = calculate_moment(mask)
                 cX = int(moment_mask["m10"] / moment_mask["m00"])
                 cY = int(moment_mask["m01"] / moment_mask["m00"])
@@ -181,7 +181,7 @@ def etude_video(video_path, upper_range, lower_range):
                 trajectoire.append(centroid)
 
 
-                # ----------- Calcul de l'angle initial de la balle + angle initial prédit -----------------
+                # ----------- Calcul de l'angle initial de la balle + hauteur max de la courbe -----------------
                 if len(trajectoire) >1 and len(trajectoire_predite) >1:
                     (x1, y1) = trajectoire[0]
                     (x2, y2) = trajectoire[1]
@@ -205,7 +205,7 @@ def etude_video(video_path, upper_range, lower_range):
                         compteur_pred += 1
 
 
-                # ------------ Calcul de l'angle et de la vitesse instantanée ------------------
+                # ------------ Calcul de la vitesse initiale + instantanée ------------------
 
                 current_frame_time = frame_counter * frameTime
                 if previous_centroid is not None and previous_pred_centroid is not None and previous_frame_time is not None:
@@ -239,7 +239,6 @@ def etude_video(video_path, upper_range, lower_range):
             future_trajectory_points = []
             frame_counter += 1
 
-        # -------- Affichage de la position prédite (même si pas de détection) --------
 
         else:
             # -------- Prédiction de la position même sans détection --------
