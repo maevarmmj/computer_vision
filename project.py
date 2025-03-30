@@ -240,8 +240,9 @@ def etude_video(video_path, upper_range, lower_range):
             frame_counter += 1
 
 
-        else:
-            # -------- Prédiction de la position même sans détection --------
+        elif frame_counter > 5:
+            # -------- Prédiction de la position même sans détection (mais après que le frame_counter soit > 5
+            # -------- pour éviter toute détection AVANT apparition de la balle --------
 
             predicted_state = kalman_filter.predict()
             predicted_centroid = (int(predicted_state[0, 0]), int(predicted_state[1, 0]))
@@ -264,6 +265,8 @@ def etude_video(video_path, upper_range, lower_range):
                 predicted_future_state = temp_kalman_filter.predict()
                 predicted_future_position = (int(predicted_future_state[0, 0]), int(predicted_future_state[1, 0]))
                 future_trajectory_points.append(predicted_future_position)
+
+            frame_counter += 1
 
         # -------- Tracé de la hauteur max (juste pour la comparaison) --------------
         if (xmax, ymax) != (0, 0):
@@ -288,7 +291,6 @@ def etude_video(video_path, upper_range, lower_range):
         # -------- Affichage angle initial + vitesse initiale -------------
         affichage_video(transform,"ANGLE :",math.degrees(angle_init), math.degrees(angle_init_pred), "deg" , point_bg_new[0] + 20, point_bg_new[1] - 20,20)
         affichage_video(transform,"VITESSE INITIALE :",v0, v0_pred, "m/s", point_bg_new[0] + 400, point_bg_new[1] - 120,20)
-
 
         # -------- Affichage de la trajectoire future prédite --------
         for future_point in future_trajectory_points:
