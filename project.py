@@ -54,7 +54,7 @@ def calcul_distance(v0, angle, g, h):
     return distance
 
 
-# --------- Calcul du moment pour la vitesse instantanée -------
+# --------- Calcul du moment pour la position du centroïde -------
 
 def calculate_moment(mask):
     moments = cv.moments(mask)
@@ -69,6 +69,9 @@ def etude_video(video_path, upper_range, lower_range):
     PIXEL_TO_METERS = 0.00185 # Coeff de proportionnalité entre les dimensions réelles et les dimensions dans la vidéo
     hauteur = 1 # Hauteur entre le sol et le bas du tableau en m
     g = 9.81  # Coefficient gravité
+    WIDTH = 1080
+    HEIGHT = 621
+
 
     # Initialisation des vitesses initiales
     v0 = v0_pred =  0
@@ -112,9 +115,7 @@ def etude_video(video_path, upper_range, lower_range):
         frame = cv.resize(frame, (0,0), fx=0.7, fy=0.7)
 
         # ------------- Partie sur l'homographie -----------------
-        WIDTH = 1080
-        HEIGHT = 621
-
+        
         point_hg = (125, 10)
         point_hd = (685, 332)
         point_bg = (25, 522)
@@ -160,7 +161,7 @@ def etude_video(video_path, upper_range, lower_range):
 
             if area > area_min:
 
-                # ----------- Calcul du centroïde + trajectoire ---------------------
+                # ----------- Calcul du centroïde ---------------------
                 moment_mask = calculate_moment(mask)
                 cX = int(moment_mask["m10"] / moment_mask["m00"])
                 cY = int(moment_mask["m01"] / moment_mask["m00"])
@@ -180,7 +181,7 @@ def etude_video(video_path, upper_range, lower_range):
                 trajectoire.append(centroid)
 
 
-                # ----------- Calcul de l'angle initial de la balle + angle initial prédit -----------------
+                # ----------- Calcul de l'angle initial de la balle + hauteur max de la courbe -----------------
                 if len(trajectoire) >1 and len(trajectoire_predite) >1:
                     (x1, y1) = trajectoire[0]
                     (x2, y2) = trajectoire[1]
@@ -204,7 +205,7 @@ def etude_video(video_path, upper_range, lower_range):
                         compteur_pred += 1
 
 
-                # ------------ Calcul de l'angle et de la vitesse instantanée ------------------
+                # ------------ Calcul de la vitesse initiale + instantanée ------------------
 
                 current_frame_time = frame_counter * frameTime
                 if previous_centroid is not None and previous_pred_centroid is not None and previous_frame_time is not None:
@@ -238,12 +239,21 @@ def etude_video(video_path, upper_range, lower_range):
             future_trajectory_points = []
             frame_counter += 1
 
-        # -------- Affichage de la position prédite (même si pas de détection) --------
 
-        else:
-            # -------- Prédiction de la position même sans détection --------
+        elif frame_counter > 5:
+            # -------- Prédiction de la position même sans détection (mais après que le frame_counter soit > 5
+            # -------- pour éviter toute détection AVANT apparition de la balle --------
+
             predicted_state = kalman_filter.predict()
             predicted_centroid = (int(predicted_state[0, 0]), int(predicted_state[1, 0]))
+
+            # A verifier car pas sûre : pour afficher la vitesse prédite même après
+            # arrêt de détection de la balle
+            v_x_pred = predicted_state[2, 0]
+            v_y_pred = predicted_state[3, 0]
+            v_x_pred = v_x_pred * PIXEL_TO_METERS
+            v_y_pred = v_y_pred * PIXEL_TO_METERS
+            v_pred = math.sqrt(v_x_pred ** 2 + v_y_pred ** 2)
 
             # -------- Calcul de la trajectoire future (points bleus foncés) --------
             temp_kalman_filter = KalmanFilter(kalman_filter.dt, (kalman_filter.E[0, 0], kalman_filter.E[1, 0]),
@@ -255,6 +265,8 @@ def etude_video(video_path, upper_range, lower_range):
                 predicted_future_state = temp_kalman_filter.predict()
                 predicted_future_position = (int(predicted_future_state[0, 0]), int(predicted_future_state[1, 0]))
                 future_trajectory_points.append(predicted_future_position)
+
+            frame_counter += 1
 
         # -------- Tracé de la hauteur max (juste pour la comparaison) --------------
         if (xmax, ymax) != (0, 0):
@@ -279,7 +291,6 @@ def etude_video(video_path, upper_range, lower_range):
         # -------- Affichage angle initial + vitesse initiale -------------
         affichage_video(transform,"ANGLE :",math.degrees(angle_init), math.degrees(angle_init_pred), "deg" , point_bg_new[0] + 20, point_bg_new[1] - 20,20)
         affichage_video(transform,"VITESSE INITIALE :",v0, v0_pred, "m/s", point_bg_new[0] + 400, point_bg_new[1] - 120,20)
-
 
         # -------- Affichage de la trajectoire future prédite --------
         for future_point in future_trajectory_points:
@@ -320,4 +331,4 @@ if __name__ == "__main__":
     upper_yellow = np.array([40, 255, 255])
     lower_yellow = np.array([20, 80, 100])
 
-    etude_video(balle_jaune, upper_yellow, lower_yellow)
+    etude_video(balle_rugby, upper_rugby, lower_rugby)
