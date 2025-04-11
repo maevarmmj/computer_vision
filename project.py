@@ -72,6 +72,7 @@ def etude_video(video_path, upper_range, lower_range):
     WIDTH = 1080
     HEIGHT = 621
 
+    out = cv.VideoWriter('output.mp4', 0x7634706d, 20.0, (WIDTH, HEIGHT)) # Pour enregistrer la vidéo
 
     # Initialisation des vitesses initiales
     v0 = v0_pred =  0
@@ -132,7 +133,6 @@ def etude_video(video_path, upper_range, lower_range):
 
         transform = cv.warpPerspective(frame, M, (WIDTH, HEIGHT)) # Facteur 1,85 entre les dim réelles et finales (-> PIXEL_TO_METERS)
 
-
         # ---------- Partie détection de l'objet -------------
         hsv = cv.cvtColor(transform, cv.COLOR_BGR2HSV)
         mask = cv.inRange(hsv, lower_range, upper_range)
@@ -178,6 +178,7 @@ def etude_video(video_path, upper_range, lower_range):
                 predicted_state = kalman_filter.predict() # Prédiction après l'update pour avoir la position la plus à jour
                 predicted_centroid = (int(predicted_state[0, 0]), int(predicted_state[1, 0]))
                 trajectoire_predite.append(predicted_centroid)
+
                 trajectoire.append(centroid)
 
 
@@ -268,11 +269,15 @@ def etude_video(video_path, upper_range, lower_range):
 
             frame_counter += 1
 
-        # -------- Tracé de la hauteur max (juste pour la comparaison) --------------
+        # -------- Tracé de la hauteur max (juste pour la comparaison) SANS PRENDRE EN COMPTE LE BAS DU TABLEAU  --------------
         if (xmax, ymax) != (0, 0):
             cv.line(transform, (xmax, ymax), (xmax, HEIGHT), (52, 235, 208), 1) # Hauteur max courbe réelle
+
         if (xmax_pred, ymax_pred) != (0, 0):
             cv.line(transform, (xmax_pred, ymax_pred), (xmax_pred, HEIGHT), (255, 255, 0), 1) # Hauteur max courbe prédite
+            
+            affichage_video(transform, "HAUTEUR MAX :", ymax, math.degrees(ymax_pred), "m",
+                            point_bg_new[0] + 20, point_bg_new[1] - 20, 20)
 
         # ----------- Tracé de parabole -------------------
         parabole = trace_parabole(trajectoire)
@@ -280,8 +285,8 @@ def etude_video(video_path, upper_range, lower_range):
         for point in trajectoire:
             cv.circle(transform, point, 4, (52, 235, 208), -1)  # Trajectoire en jaune
 
-        for point in trajectoire_predite:
-            cv.circle(transform, point, 4, (255, 255, 0), -1)  # Trajectoire en cyan
+        # for point in trajectoire_predite:
+        #     cv.circle(transform, point, 4, (255, 255, 0), -1)  # Trajectoire en cyan
 
 
         cv.putText(transform, f"Vitesse mesuree : {v:.2f} m/s", (point_bg_new[0] + 20, point_bg_new[1] - 140), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
@@ -293,11 +298,11 @@ def etude_video(video_path, upper_range, lower_range):
         affichage_video(transform,"VITESSE INITIALE :",v0, v0_pred, "m/s", point_bg_new[0] + 400, point_bg_new[1] - 120,20)
 
         # -------- Affichage de la trajectoire future prédite --------
-        for future_point in future_trajectory_points:
-            cv.circle(transform, future_point, 4, (255, 0, 0), -1) # En bleu foncé
+        # for future_point in future_trajectory_points:
+        #     cv.circle(transform, future_point, 4, (255, 0, 0), -1) # En bleu foncé
 
         # -------- Affichage de la position prédite (temps réel) --------
-        cv.circle(transform, predicted_centroid, 4, (255, 255, 0), -1) # En cyan
+        # cv.circle(transform, predicted_centroid, 4, (255, 255, 0), -1) # En cyan
 
 
         # ---------- Calcul distance parcourue par la balle + distance prédite par Kalman ------------
@@ -307,7 +312,8 @@ def etude_video(video_path, upper_range, lower_range):
 
 
         cv.imshow('resultat', transform)
-        cv.waitKey(20) & 0xFF
+        out.write(transform)
+        cv.waitKey(5) & 0xFF
         if cv.waitKey(int(frameTime * 1000)) & 0xFF == ord('q'):
             break
 
@@ -331,4 +337,4 @@ if __name__ == "__main__":
     upper_yellow = np.array([40, 255, 255])
     lower_yellow = np.array([20, 80, 100])
 
-    etude_video(balle_rugby, upper_rugby, lower_rugby)
+    etude_video(balle_rouge, upper_red, lower_red)
