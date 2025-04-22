@@ -38,10 +38,6 @@ class KalmanFilter(object):
         # ---------- Calcul de la covariance de l'erreur ----------
         self.P=np.dot(np.dot(self.A, self.P), self.A.T)+self.Q
 
-        # ---------- Ajout de la gravité ----------
-        gravity_pixel_per_frame_sq = 9.81 / self.pixel_to_meters * (self.dt**2)
-        self.E[5, 0] = self.E[5, 0] + gravity_pixel_per_frame_sq # On ajoute la gravité à ay
-
         return self.E
 
     def update(self, z):

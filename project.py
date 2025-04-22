@@ -16,11 +16,11 @@ def affichage_video(frame, titre, param, param_pred, unite, x, y, decalY):
                (x, y - (decalY+20)), cv.FONT_HERSHEY_SIMPLEX, 0.5,
                (255, 255, 255), 2)
     if param != 0:
-        cv.putText(frame, f"ERREUR: {((param_pred-param)/abs(param))*100:.2f} %",
+        cv.putText(frame, f"ERREUR : {((param_pred-param)/abs(param))*100:.2f} %",
                (x, y - (decalY-20)), cv.FONT_HERSHEY_SIMPLEX, 0.5,
                (31, 173, 255), 2)
     else:
-        cv.putText(frame, "ERREUR: 0 %",
+        cv.putText(frame, "ERREUR : 0 %",
                (x, y - (decalY-20)), cv.FONT_HERSHEY_SIMPLEX, 0.5,
                (31, 173, 255), 2)
 
@@ -89,6 +89,7 @@ def etude_video(video_path, upper_range, lower_range):
     trajectoire = []
     trajectoire_predite = []
     future_trajectory_points = []
+    trajectoire_v = []
 
     previous_centroid = None  # Dernière position connue de la balle
     previous_pred_centroid = None
@@ -232,6 +233,7 @@ def etude_video(video_path, upper_range, lower_range):
                             v0_pred = v_pred
                             compteur_v0 += 1
 
+                    trajectoire_v.append((current_frame_time, cY))
 
                 previous_centroid = centroid
                 previous_pred_centroid = predicted_centroid
@@ -276,8 +278,8 @@ def etude_video(video_path, upper_range, lower_range):
         if (xmax_pred, ymax_pred) != (0, 0):
             cv.line(transform, (xmax_pred, ymax_pred), (xmax_pred, HEIGHT), (255, 255, 0), 1) # Hauteur max courbe prédite
             
-            affichage_video(transform, "HAUTEUR MAX :", ymax, math.degrees(ymax_pred), "m",
-                            point_bg_new[0] + 20, point_bg_new[1] - 20, 20)
+            affichage_video(transform, "HAUTEUR MAX :", (HEIGHT-ymax)*PIXEL_TO_METERS, (HEIGHT-ymax_pred)*PIXEL_TO_METERS, "m",
+                            point_hd_new[0] - 800, point_hd_new[1]+100, 20)
 
         # ----------- Tracé de parabole -------------------
         parabole = trace_parabole(trajectoire)
@@ -286,7 +288,7 @@ def etude_video(video_path, upper_range, lower_range):
             cv.circle(transform, point, 4, (52, 235, 208), -1)  # Trajectoire en jaune
 
         # for point in trajectoire_predite:
-        #     cv.circle(transform, point, 4, (255, 255, 0), -1)  # Trajectoire en cyan
+            cv.circle(transform, point, 4, (255, 255, 0), -1)  # Trajectoire en cyan
 
 
         cv.putText(transform, f"Vitesse mesuree : {v:.2f} m/s", (point_bg_new[0] + 20, point_bg_new[1] - 140), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
@@ -298,16 +300,21 @@ def etude_video(video_path, upper_range, lower_range):
         affichage_video(transform,"VITESSE INITIALE :",v0, v0_pred, "m/s", point_bg_new[0] + 400, point_bg_new[1] - 120,20)
 
         # -------- Affichage de la trajectoire future prédite --------
-        # for future_point in future_trajectory_points:
-        #     cv.circle(transform, future_point, 4, (255, 0, 0), -1) # En bleu foncé
+        for future_point in future_trajectory_points:
+            cv.circle(transform, future_point, 4, (255, 0, 0), -1) # En bleu foncé
 
         # -------- Affichage de la position prédite (temps réel) --------
-        # cv.circle(transform, predicted_centroid, 4, (255, 255, 0), -1) # En cyan
+        cv.circle(transform, predicted_centroid, 4, (255, 255, 0), -1) # En cyan
+
 
 
         # ---------- Calcul distance parcourue par la balle + distance prédite par Kalman ------------
-        distance_totale = calcul_distance(v0, angle_init, g, hauteur)
-        distance_pred = calcul_distance(v0_pred, angle_init_pred, g, hauteur)
+        distance_totale = 0
+        distance_pred = 0
+        if len(trajectoire) > 1:
+            hauteur_0 = hauteur + (HEIGHT-trajectoire[0][1])*PIXEL_TO_METERS # Distance sol - balle
+            distance_totale = calcul_distance(v0, angle_init, g, hauteur_0)
+            distance_pred = calcul_distance(v0_pred, angle_init_pred, g, hauteur_0)
         affichage_video(transform,"DISTANCE :",distance_totale, distance_pred, "m", point_bg_new[0] + 400,point_bg_new[1] - 20,20)
 
 
@@ -320,6 +327,33 @@ def etude_video(video_path, upper_range, lower_range):
 
     cap.release()
     cv.destroyAllWindows()
+
+    # ----------- PARTIE POUR DETERMINER g --------------
+
+    timestamps = np.array([item[0] for item in trajectoire_v])
+    pixels_y = np.array([item[1] for item in trajectoire_v])
+
+    # Conversion px -> m
+    y_meters = (HEIGHT - pixels_y) * PIXEL_TO_METERS # Adaptation au repère physique
+
+    # Modèle: y(t) = A*t^2 + B*t + C
+    # Correspondance: A = -0.5*g, B = v0y, C = y0
+    coeffs_y = np.polyfit(timestamps, y_meters, 2)
+    A = coeffs_y[0]
+    B = coeffs_y[1]
+    C = coeffs_y[2]
+
+    g_estimated = -2 * A
+
+    print(f"y(t) = At^2 + Bt + C:")
+    print(f"  A (-0.5*g) = {A:.4f}")
+    print(f"  B (v0y)   = {B:.4f}")
+    print(f"  C (y0) = {C:.4f}")
+    print(f"  => g estimé = -2 * A = {g_estimated:.2f} m/s²")
+
+    hauteur_0 = hauteur + (HEIGHT - C) * PIXEL_TO_METERS  # Distance sol - balle
+    print(f"Rappel distance parcourue calculée avant : {distance_totale:.2f}")
+    print(f"Distance parcourue estimée après détermination de G et y0 : {calcul_distance(v0, angle_init, g_estimated, hauteur_0):.2f}")
 
 if __name__ == "__main__":
     # BALLE ROUGE
