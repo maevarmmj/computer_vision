@@ -3,7 +3,7 @@ import cv2 as cv
 import numpy as np
 from KalmanFilter import KalmanFilter
 
-# --------- Affichage des métriques -------------
+# --------- Affichage des métriques sur la vidéo -------------
 
 def affichage_video(frame, titre, param, param_pred, unite, x, y, decalY):
     cv.putText(frame, titre,
@@ -46,7 +46,7 @@ def trace_parabole(trajectoire):
 
     return points_parabole
 
-# --------- Calcul distance ------------------
+# --------- Calcul distance totale parcourue------------------
 
 def calcul_distance(v0, angle, g, h):
     distance = (v0 / g) * math.cos(angle) * (
@@ -60,13 +60,18 @@ def calculate_moment(mask):
     moments = cv.moments(mask)
     return moments
 
+# --------- FONCTION PRINCIPALE ----------
 
-def etude_video(video_path, upper_range, lower_range):
+def etude_video(balle):
     # --------- Initialisation des paramètres -----------------
+    video_path = balle[0]
+    upper_range = balle[1]
+    lower_range = balle[2]
+
     cap = cv.VideoCapture(video_path)
     frameRate = 30.0  # Frame / s
     frameTime = 1.0 / frameRate
-    PIXEL_TO_METERS = 0.00185 # Coeff de proportionnalité entre les dimensions réelles et les dimensions dans la vidéo
+    PIXEL_TO_METERS = 0.00185 # Facteur d'échelle (px <-> m)
     hauteur = 1 # Hauteur entre le sol et le bas du tableau en m
     g = 9.81  # Coefficient gravité
     WIDTH = 1080
@@ -80,7 +85,7 @@ def etude_video(video_path, upper_range, lower_range):
     angle_init = angle_init_pred = 0
 
     # Initialisation des positions max initiales
-    xmax_pred, ymax_pred = xmax, ymax = 0, 0
+    x0 = x1 = y0 = y1 = x0_pred = x1_pred = y0_pred = y1_pred = xmax_pred = ymax_pred = xmax = ymax = 0
 
     # Initialisation de l'aire minimale de chaque balle
     area_min = 0
@@ -89,7 +94,7 @@ def etude_video(video_path, upper_range, lower_range):
     trajectoire = []
     trajectoire_predite = []
     future_trajectory_points = []
-    trajectoire_v = []
+    trajectoire_v = [] # Stocke le temps + position y à chaque frame
 
     previous_centroid = None  # Dernière position connue de la balle
     previous_pred_centroid = None
@@ -154,7 +159,7 @@ def etude_video(video_path, upper_range, lower_range):
             cv.rectangle(transform, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
             if video_path == "Video/Mousse.mp4":
-                area_min = 930
+                area_min = 200
             elif video_path == "Video/Rugby.mp4":
                 area_min = 5600
             elif video_path == "Video/Tennis.mp4":
@@ -180,18 +185,17 @@ def etude_video(video_path, upper_range, lower_range):
                 predicted_centroid = (int(predicted_state[0, 0]), int(predicted_state[1, 0]))
                 trajectoire_predite.append(predicted_centroid)
 
-                trajectoire.append(centroid)
 
 
                 # ----------- Calcul de l'angle initial de la balle + hauteur max de la courbe -----------------
                 if len(trajectoire) >1 and len(trajectoire_predite) >1:
-                    (x1, y1) = trajectoire[0]
-                    (x2, y2) = trajectoire[1]
-                    (x1_pred, y1_pred) = trajectoire_predite[0]
-                    (x2_pred, y2_pred) = trajectoire_predite[1]
+                    (x0, y0) = trajectoire[0]
+                    (x1, y1) = trajectoire[1]
+                    (x0_pred, y0_pred) = trajectoire_predite[0]
+                    (x1_pred, y1_pred) = trajectoire_predite[1]
 
-                    angle_init = - math.atan2((y2 - y1), (x2 - x1))
-                    angle_init_pred = - math.atan2((y2_pred - y1_pred), (x2_pred - x1_pred))
+                    angle_init = - math.atan2((y1 - y0), (x1 - x0))
+                    angle_init_pred = - math.atan2((y1_pred - y0_pred), (x1_pred - x0_pred))
 
                     x_prev, y_prev = previous_centroid
                     x_current, y_current = centroid
@@ -233,7 +237,8 @@ def etude_video(video_path, upper_range, lower_range):
                             v0_pred = v_pred
                             compteur_v0 += 1
 
-                    trajectoire_v.append((current_frame_time, cY))
+                trajectoire.append(centroid)
+                trajectoire_v.append((current_frame_time, cY))
 
                 previous_centroid = centroid
                 previous_pred_centroid = predicted_centroid
@@ -250,8 +255,7 @@ def etude_video(video_path, upper_range, lower_range):
             predicted_state = kalman_filter.predict()
             predicted_centroid = (int(predicted_state[0, 0]), int(predicted_state[1, 0]))
 
-            # A verifier car pas sûre : pour afficher la vitesse prédite même après
-            # arrêt de détection de la balle
+            # Afficher la vitesse prédite même après arrêt de détection de la balle
             v_x_pred = predicted_state[2, 0]
             v_y_pred = predicted_state[3, 0]
             v_x_pred = v_x_pred * PIXEL_TO_METERS
@@ -273,21 +277,27 @@ def etude_video(video_path, upper_range, lower_range):
 
         # -------- Tracé de la hauteur max (juste pour la comparaison) SANS PRENDRE EN COMPTE LE BAS DU TABLEAU  --------------
         if (xmax, ymax) != (0, 0):
-            cv.line(transform, (xmax, ymax), (xmax, HEIGHT), (52, 235, 208), 1) # Hauteur max courbe réelle
+            # Flèche vers le haut
+            cv.arrowedLine(transform, (xmax, y0), (xmax, ymax + 10), (52, 235, 208), 2, tipLength=0.1)
+            cv.line(transform, (x0, y0), (xmax, y0), (52, 235, 208), 1)
 
         if (xmax_pred, ymax_pred) != (0, 0):
-            cv.line(transform, (xmax_pred, ymax_pred), (xmax_pred, HEIGHT), (255, 255, 0), 1) # Hauteur max courbe prédite
-            
-            affichage_video(transform, "HAUTEUR MAX :", (HEIGHT-ymax)*PIXEL_TO_METERS, (HEIGHT-ymax_pred)*PIXEL_TO_METERS, "m",
-                            point_hd_new[0] - 800, point_hd_new[1]+100, 20)
+            cv.arrowedLine(transform, (xmax_pred, y0_pred), (xmax_pred, ymax_pred), (255, 255, 0), 2, tipLength=0.1) # Hauteur max courbe prédite
+            cv.line(transform, (x0_pred, y0_pred), (xmax_pred, y0_pred), (255, 255, 0), 1)
+
+            y_0_ball = (HEIGHT-y0)
+            y_0_ball_pred = (HEIGHT - y0_pred)
+            hauteur_max = (HEIGHT-ymax-y_0_ball)*PIXEL_TO_METERS
+            hauteur_max_pred = (HEIGHT-ymax-y_0_ball_pred)*PIXEL_TO_METERS
+            affichage_video(transform, "HAUTEUR MAX :", hauteur_max, hauteur_max_pred, "m",
+                    point_hd_new[0] - 800, point_hd_new[1]+100, 20)
 
         # ----------- Tracé de parabole -------------------
         parabole = trace_parabole(trajectoire)
         cv.polylines(transform, [parabole], False, (52, 235, 208), 1)
         for point in trajectoire:
             cv.circle(transform, point, 4, (52, 235, 208), -1)  # Trajectoire en jaune
-
-        # for point in trajectoire_predite:
+        for point in trajectoire_predite:
             cv.circle(transform, point, 4, (255, 255, 0), -1)  # Trajectoire en cyan
 
 
@@ -329,13 +339,11 @@ def etude_video(video_path, upper_range, lower_range):
     cv.destroyAllWindows()
 
     # ----------- PARTIE POUR DETERMINER g --------------
-
     timestamps = np.array([item[0] for item in trajectoire_v])
     pixels_y = np.array([item[1] for item in trajectoire_v])
 
     # Conversion px -> m
     y_meters = (HEIGHT - pixels_y) * PIXEL_TO_METERS # Adaptation au repère physique
-
     # Modèle: y(t) = A*t^2 + B*t + C
     # Correspondance: A = -0.5*g, B = v0y, C = y0
     coeffs_y = np.polyfit(timestamps, y_meters, 2)
@@ -348,18 +356,18 @@ def etude_video(video_path, upper_range, lower_range):
     print(f"y(t) = At^2 + Bt + C:")
     print(f"  A (-0.5*g) = {A:.4f}")
     print(f"  B (v0y)   = {B:.4f}")
-    print(f"  C (y0) = {C:.4f}")
+    print(f"  C (h0) = {C:.4f}")
     print(f"  => g estimé = -2 * A = {g_estimated:.2f} m/s²")
-
     hauteur_0 = hauteur + (HEIGHT - C) * PIXEL_TO_METERS  # Distance sol - balle
     print(f"Rappel distance parcourue calculée avant : {distance_totale:.2f}")
-    print(f"Distance parcourue estimée après détermination de G et y0 : {calcul_distance(v0, angle_init, g_estimated, hauteur_0):.2f}")
+    print(f"Distance parcourue estimée après détermination de G et h0 : {calcul_distance(v0, angle_init, g_estimated, hauteur_0):.2f}")
 
 if __name__ == "__main__":
     # BALLE ROUGE
     balle_rouge = "Video/Mousse.mp4"
     upper_red = np.array([255, 255, 246])
     lower_red = np.array([0, 135, 22])
+
 
     # BALLE DE RUGBY
     balle_rugby = "Video/Rugby.mp4"
@@ -371,4 +379,9 @@ if __name__ == "__main__":
     upper_yellow = np.array([40, 255, 255])
     lower_yellow = np.array([20, 80, 100])
 
-    etude_video(balle_rouge, upper_red, lower_red)
+
+    red = [balle_rouge, upper_red, lower_red]
+    rugby = [balle_rugby, upper_rugby, lower_rugby]
+    yellow = [balle_jaune, upper_yellow, lower_yellow]
+    # Choix entre "red", "rugby", "yellow"
+    etude_video(yellow)
