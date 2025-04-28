@@ -2,6 +2,11 @@ import math
 import cv2 as cv
 import numpy as np
 from KalmanFilter import KalmanFilter
+"""
+Prérequis rapides : Soit mettre les 3 vidéos dans un dossier "Video",  
+                    soit enlever "Video" dans les paths des fichiers (ex : "Video/Mousse.mp4"),
+                    dans le if __name__ == "__main__"
+"""
 
 # --------- Affichage des métriques sur la vidéo -------------
 
@@ -176,16 +181,13 @@ def etude_video(balle):
 
 
                 # -------- Mise à jour du filtre de Kalman avec la détection --------
-                measurement = np.matrix([[cX], [cY]]) # Mesure = centroïde détecté
+                measurement = np.matrix([[cX], [cY]]) # Mesure = centroïde détecté (ne sert que lorsqu'un nouveau centroïde est détecté pour adapter la mesure du filtre)
                 kalman_filter.update(measurement)
-
 
                 # -------- Mise à jour de la position prédite  ----------
                 predicted_state = kalman_filter.predict() # Prédiction après l'update pour avoir la position la plus à jour
                 predicted_centroid = (int(predicted_state[0, 0]), int(predicted_state[1, 0]))
                 trajectoire_predite.append(predicted_centroid)
-
-
 
                 # ----------- Calcul de l'angle initial de la balle + hauteur max de la courbe -----------------
                 if len(trajectoire) >1 and len(trajectoire_predite) >1:
@@ -277,7 +279,6 @@ def etude_video(balle):
 
         # -------- Tracé de la hauteur max (juste pour la comparaison) SANS PRENDRE EN COMPTE LE BAS DU TABLEAU  --------------
         if (xmax, ymax) != (0, 0):
-            # Flèche vers le haut
             cv.arrowedLine(transform, (xmax, y0), (xmax, ymax + 10), (52, 235, 208), 2, tipLength=0.1)
             cv.line(transform, (x0, y0), (xmax, y0), (52, 235, 208), 1)
 
@@ -316,8 +317,6 @@ def etude_video(balle):
         # -------- Affichage de la position prédite (temps réel) --------
         cv.circle(transform, predicted_centroid, 4, (255, 255, 0), -1) # En cyan
 
-
-
         # ---------- Calcul distance parcourue par la balle + distance prédite par Kalman ------------
         distance_totale = 0
         distance_pred = 0
@@ -327,13 +326,11 @@ def etude_video(balle):
             distance_pred = calcul_distance(v0_pred, angle_init_pred, g, hauteur_0)
         affichage_video(transform,"DISTANCE :",distance_totale, distance_pred, "m", point_bg_new[0] + 400,point_bg_new[1] - 20,20)
 
-
         cv.imshow('resultat', transform)
         out.write(transform)
         cv.waitKey(5) & 0xFF
         if cv.waitKey(int(frameTime * 1000)) & 0xFF == ord('q'):
             break
-
 
     cap.release()
     cv.destroyAllWindows()
@@ -342,8 +339,7 @@ def etude_video(balle):
     timestamps = np.array([item[0] for item in trajectoire_v])
     pixels_y = np.array([item[1] for item in trajectoire_v])
 
-    # Conversion px -> m
-    y_meters = (HEIGHT - pixels_y) * PIXEL_TO_METERS # Adaptation au repère physique
+    y_meters = (HEIGHT - pixels_y) * PIXEL_TO_METERS # Adaptation au repère physique (conversion px -> m)
     # Modèle: y(t) = A*t^2 + B*t + C
     # Correspondance: A = -0.5*g, B = v0y, C = y0
     coeffs_y = np.polyfit(timestamps, y_meters, 2)
@@ -359,15 +355,13 @@ def etude_video(balle):
     print(f"  C (h0) = {C:.4f}")
     print(f"  => g estimé = -2 * A = {g_estimated:.2f} m/s²")
     hauteur_0 = hauteur + (HEIGHT - C) * PIXEL_TO_METERS  # Distance sol - balle
-    print(f"Rappel distance parcourue calculée avant : {distance_totale:.2f}")
-    print(f"Distance parcourue estimée après détermination de G et h0 : {calcul_distance(v0, angle_init, g_estimated, hauteur_0):.2f}")
+    print(f"Distance parcourue estimée après détermination de g et h0 : {calcul_distance(v0, angle_init, g_estimated, hauteur_0):.2f}")
 
 if __name__ == "__main__":
     # BALLE ROUGE
     balle_rouge = "Video/Mousse.mp4"
     upper_red = np.array([255, 255, 246])
     lower_red = np.array([0, 135, 22])
-
 
     # BALLE DE RUGBY
     balle_rugby = "Video/Rugby.mp4"
@@ -379,9 +373,9 @@ if __name__ == "__main__":
     upper_yellow = np.array([40, 255, 255])
     lower_yellow = np.array([20, 80, 100])
 
-
     red = [balle_rouge, upper_red, lower_red]
     rugby = [balle_rugby, upper_rugby, lower_rugby]
     yellow = [balle_jaune, upper_yellow, lower_yellow]
-    # Choix entre "red", "rugby", "yellow"
+
+    # Choix entre "red", "yellow", "rugby",
     etude_video(yellow)

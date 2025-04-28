@@ -2,7 +2,6 @@ import numpy as np
 import cv2 as cv
 import glob
 
-
 def etalonnage():
     # ---- Termination criteria -----
     criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
@@ -44,9 +43,6 @@ def etalonnage():
         # --------- Affichage des résultats ------------
         print("\nMatrice intrinsèque de la caméra :\n", mtx)
         print("\nCoefficients de distorsion :\n", dist)
-
-        # --------- Sauvegarde des paramètres ------------
-        np.savez("calibration_data.npz", mtx=mtx, dist=dist, rvecs=rvecs, tvecs=tvecs)
 
         return mtx, dist
 
